@@ -1,57 +1,60 @@
 import cv2
 import mediapipe as mp
+from mediapipe.tasks import python
+from mediapipe.tasks.python import vision
+from mediapipe.tasks.python.components.containers import landmark as landmark_module
 
-# 1. เริ่มใช้งานโมดูลตรวจจับมือและตัววาดกราฟิกของ MediaPipe
-mp_hands = mp.solutions.hands
-mp_drawing = mp.solutions.drawing_utils
-
-# ตั้งค่าโมเดล Hand Tracking
-hands = mp_hands.Hands(
-    static_image_mode=False,        # ตั้งค่าเป็น False เพื่อบอกว่าเราประมวลผลเป็นวิดีโอต่อเนื่อง
-    max_num_hands=2,                # จำนวนมือสูงสุดที่ต้องการให้ระบบตรวจจับพร้อมกัน
-    min_detection_confidence=0.5,   # ค่าความมั่นใจขั้นต่ำในการตรวจจับครั้งแรก
-    min_tracking_confidence=0.5    # ค่าความมั่นใจขั้นต่ำในการติดตามพิกัดมือต่อเนื่อง
+base_options = python.BaseOptions(model_asset_path='hand_landmarker.task')
+options = vision.HandLandmarkerOptions(
+    base_options=base_options,
+    num_hands=2,
+    min_hand_detection_confidence=0.5,
+    min_tracking_confidence=0.5,
+    running_mode=vision.RunningMode.VIDEO
 )
 
-# 2. เชื่อมต่อไปยังกล้องเว็บแคม (ปกติกล้องหลักในคอมคือเลข 0)
-cap = cv2.VideoCapture(0)
+cap = cv2.VideoCapture(0) # 0 คือกล้องตัวแรก
 
-print("กำลังเปิดกล้อง... กดปุ่ม 'q' บนคีย์บอร์ดเพื่อปิดโปรแกรม")
+with vision.HandLandmarker.create_from_options(options) as landmarker:
+    while cap.isOpened():
+        success, frame = cap.read()
+        if not success:
+            print("Ignoring empty camera frame.")
+            continue
 
-while cap.isOpened():
-    success, frame = cap.read()
-    if not success:
-        print("ไม่สามารถอ่านเฟรมจากกล้องได้")
-        break
+        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=frame_rgb)
 
-    # พลิกภาพแนวนอนเพื่อให้เหมือนการมองกระจกเงา (ช่วยให้การควบคุมเป็นธรรมชาติขึ้น)
-    frame = cv2.flip(frame, 1)
+       
+        timestamp_ms = int(cap.get(cv2.CAP_PROP_POS_MSEC))
+        result = landmarker.detect_for_video(mp_image, timestamp_ms)
 
-    # แปลงสีของภาพจาก BGR (ที่ OpenCV ใช้) เป็น RGB (ที่ MediaPipe ต้องการ)
-    rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+       
+        if result.hand_landmarks:
+            for hand in result.hand_landmarks:
+                for lm in hand:
+                    h, w, _ = frame.shape
+                    cx, cy = int(lm.x * w), int(lm.y * h)
+                    cv2.circle(frame, (cx, cy), 5, (0, 255, 0), -1)
 
-    # ส่งเฟรมภาพไปให้ AI ของ MediaPipe ประมวลผลหาพิกัดมือ
-    results = hands.process(rgb_frame)
+                # Draw connections
+                connections = [
+                    (0,1),(1,2),(2,3),(3,4),
+                    (0,5),(5,6),(6,7),(7,8),
+                    (0,9),(9,10),(10,11),(11,12),
+                    (0,13),(13,14),(14,15),(15,16),
+                    (0,17),(17,18),(18,19),(19,20),
+                    (5,9),(9,13),(13,17)
+                ]
+                h, w, _ = frame.shape
+                for a, b in connections:
+                    x1, y1 = int(hand[a].x * w), int(hand[a].y * h)
+                    x2, y2 = int(hand[b].x * w), int(hand[b].y * h)
+                    cv2.line(frame, (x1, y1), (x2, y2), (0, 0, 255), 2)
 
-    # 3. ถ้า AI ตรวจพบพิกัดมือ ให้ทำการวาดจุดพิกัดลงบนหน้าจอ
-    if results.multi_hand_landmarks:
-        for hand_landmarks in results.multi_hand_landmarks:
-            # วาดจุด (Landmarks) ทั้ง 21 จุดและเส้นเชื่อมโยงกระดูกมือ (Connections)
-            mp_drawing.draw_landmarks(
-                frame, 
-                hand_landmarks, 
-                mp_hands.HAND_CONNECTIONS,
-                mp_drawing.DrawingSpec(color=(0, 255, 0), thickness=2, circle_radius=4), # สีของจุด (เขียว)
-                mp_drawing.DrawingSpec(color=(0, 0, 255), thickness=2)                 # สีของเส้นเชื่อม (แดง)
-            )
+        cv2.imshow('MediaPipe Hands', cv2.flip(frame, 1))
+        if cv2.waitKey(5) & 0xFF == 27:  # ESC to quit
+            break
 
-    # 4. แสดงผลลัพธ์ผ่านหน้าต่างแสดงวิดีโอของ OpenCV
-    cv2.imshow('My First Hand Tracking', frame)
-
-    # วิธีปิดโปรแกรม: เช็คว่ามีการกดปุ่ม 'q' บนคีย์บอร์ดหรือไม่
-    if cv2.waitKey(1) & 0xFF == ord('q'):
-        break
-
-# ล้างระบบและปิดหน้าต่างทั้งหมดเมื่อเลิกใช้งาน
 cap.release()
 cv2.destroyAllWindows()
