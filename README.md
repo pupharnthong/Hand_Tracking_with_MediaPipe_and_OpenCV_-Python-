@@ -1,4 +1,4 @@
-# hand_tracker_-python-
+# Hand Tracking with MediaPipe & OpenCV
 i built this for portfolio
   yes there is ai assist
 
