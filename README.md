@@ -4,12 +4,15 @@ i built this for portfolio
 
   ## Requirement ##
   > python 3.11+
+>
   > camera
 
   ## Install libraries ##
-  Bash
-  pip install opencv-python mediapipe
+  > Bash
+>
+  > pip install opencv-python mediapipe
 
   ## Usage ##
-  Bash
-  python cv_01.py
+  > Bash
+> 
+  > python cv_01.py
